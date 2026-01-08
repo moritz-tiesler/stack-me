@@ -14,8 +14,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Use the GitHub CLI to get the count of changed files
+          # We add -R ${{ github.repository }} so it doesn't need a local .git folder
           FILE_COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
+            -R ${{ github.repository }} \
             --json files --jq '.files | length')
 
           echo "Files changed: $FILE_COUNT"
