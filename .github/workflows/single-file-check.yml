@@ -2,28 +2,41 @@ name: "Single File PR Check"
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   check-file-count:
     runs-on: ubuntu-latest
+    env:
+      # --- CONFIGURATION ---
+      IGNORED_EXTENSIONS: "md|txt|png|jpg|svg" # Add extensions here
+      BYPASS_LABEL: "bypass-limit"
+      # ---------------------
     permissions:
       pull-requests: read
     steps:
-      - name: Check number of files changed
+      - name: Check for Bypass and File Count
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # We add -R ${{ github.repository }} so it doesn't need a local .git folder
-          FILE_COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
-            -R ${{ github.repository }} \
-            --json files --jq '.files | length')
+          PR_DATA=$(gh pr view ${{ github.event.pull_request.number }} -R ${{ github.repository }} --json labels,files)
 
-          echo "Files changed: $FILE_COUNT"
+          # 1. Check for bypass label
+          if echo "$PR_DATA" | jq -r '.labels[].name' | grep -qi "^${{ env.BYPASS_LABEL }}$"; then
+            echo "✅ Bypass label detected. Skipping check."
+            exit 0
+          fi
+
+          # 2. Filter files and count
+          # This JQ filter dynamically uses the IGNORED_EXTENSIONS variable
+          FILE_COUNT=$(echo "$PR_DATA" | jq --arg exts "${{ env.IGNORED_EXTENSIONS }}" \
+            '[.files[].path | select(test("\\.(" + $exts + ")$") | not)] | length')
+
+          echo "Relevant files changed: $FILE_COUNT"
 
           if [ "$FILE_COUNT" -gt 1 ]; then
-            echo "❌ Error: This PR touches $FILE_COUNT files. Only 1 file is allowed per PR."
+            echo "❌ Error: PR touches $FILE_COUNT code files. Only 1 is allowed."
             exit 1
           else
-            echo "✅ Success: PR touches only 1 file."
+            echo "✅ Success!"
           fi
