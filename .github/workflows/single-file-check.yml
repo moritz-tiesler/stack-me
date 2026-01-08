@@ -1,0 +1,29 @@
+name: "Single File PR Check"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-file-count:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check number of files changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # We add -R ${{ github.repository }} so it doesn't need a local .git folder
+          FILE_COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
+            -R ${{ github.repository }} \
+            --json files --jq '.files | length')
+
+          echo "Files changed: $FILE_COUNT"
+
+          if [ "$FILE_COUNT" -gt 1 ]; then
+            echo "❌ Error: This PR touches $FILE_COUNT files. Only 1 file is allowed per PR."
+            exit 1
+          else
+            echo "✅ Success: PR touches only 1 file."
+          fi
